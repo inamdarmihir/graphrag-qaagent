@@ -1,13 +1,28 @@
 import torch
-from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForTokenClassification
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Initialize the NER pipeline
-ner_pipeline = pipeline("ner", model="dslim/bert-base-NER")
+# Initialize the NER model and tokenizer
+ner_model_name = "dslim/bert-base-NER"
+ner_tokenizer = AutoTokenizer.from_pretrained(ner_model_name)
+ner_model = AutoModelForTokenClassification.from_pretrained(ner_model_name)
 
 def extract_entities_and_relationships(text):
     try:
-        return ner_pipeline(text[:10000])  # Limit text to avoid memory issues
+        inputs = ner_tokenizer(text[:10000], return_tensors="pt", truncation=True, max_length=512)
+        with torch.no_grad():
+            outputs = ner_model(**inputs)
+        
+        predictions = torch.argmax(outputs.logits, dim=2)
+        tokens = ner_tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
+        
+        entities = []
+        for token, prediction in zip(tokens, predictions[0]):
+            if prediction != 0:  # 0 is usually the 'O' (Outside) tag
+                entity_type = ner_model.config.id2label[prediction.item()]
+                entities.append({"word": token, "entity": entity_type})
+        
+        return entities
     except Exception as e:
         print(f"Error in NER: {e}")
         return []
