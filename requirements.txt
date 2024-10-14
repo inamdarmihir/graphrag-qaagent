@@ -1,0 +1,7 @@
+wikipedia-api==0.7.1
+transformers==4.44.2
+networkx==3.3
+matplotlib==3.7.1
+torch==2.2.0
+scikit-learn==1.4.0
+numpy==1.26.4
