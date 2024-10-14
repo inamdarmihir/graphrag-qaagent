@@ -1,9 +1,12 @@
 import networkx as nx
 import re
-from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForQuestionAnswering
+import torch
 
-# Initialize the QA pipeline
-qa_pipeline = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+# Initialize the QA model and tokenizer
+model_name = "distilbert-base-cased-distilled-squad"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForQuestionAnswering.from_pretrained(model_name)
 
 def create_knowledge_graph(entities):
     G = nx.Graph()
@@ -28,6 +31,15 @@ def create_knowledge_graph(entities):
 def strip_tags(text):
     return re.sub('<[^<]+?>', '', text)
 
+def qa_pipeline(question, context):
+    inputs = tokenizer(question, context, return_tensors="pt")
+    with torch.no_grad():
+        outputs = model(**inputs)
+    answer_start = outputs.start_logits.argmax()
+    answer_end = outputs.end_logits.argmax() + 1
+    answer = tokenizer.decode(inputs["input_ids"][0][answer_start:answer_end])
+    return {"answer": answer}
+
 def extract_answer(query, context, full_response):
     keywords = {
         "who": ["led", "commanded"],
@@ -44,7 +56,7 @@ def extract_answer(query, context, full_response):
             return full_response
         new_context = " ".join(relevant_sentences)
         try:
-            new_response = qa_pipeline(question=query, context=new_context)
+            new_response = qa_pipeline(query, new_context)
             return new_response['answer']
         except Exception as e:
             print(f"Error in QA pipeline: {e}")
@@ -57,7 +69,7 @@ def generate_response(query, graph):
                             for node in graph.nodes()
                             for neighbor in graph[node]])
 
-        initial_response = qa_pipeline(question=query, context=context)
+        initial_response = qa_pipeline(query, context)
         detailed_answer = extract_answer(query, context, initial_response['answer'])
 
         # Ensure the answer is at least one complete sentence
